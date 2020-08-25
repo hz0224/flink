@@ -25,9 +25,6 @@ class Student{
 public class TestClone {
     public static void main(String[] args) {
 
-        Student stu = new Student();
-        stu.setName("jack");
-        stu.setAge(18);
-
+        System.out.println("ni");
     }
 }
