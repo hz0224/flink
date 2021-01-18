@@ -4,7 +4,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 
 import org.apache.flink.streaming.api.TimeCharacteristic
-import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
+import org.apache.flink.streaming.api.scala.{OutputTag, StreamExecutionEnvironment}
 import org.apache.flink.streaming.api.scala.function.ProcessWindowFunction
 import org.apache.flink.streaming.api.windowing.assigners.{SlidingEventTimeWindows, TumblingEventTimeWindows}
 import org.apache.flink.streaming.api.windowing.time.Time
@@ -31,10 +31,13 @@ object EventTimeWithWindow {
       env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
       env.setParallelism(1)
 
+      //侧输出流标签，数据并没有在里面，这只是个标签
+      val lateTag = new OutputTag[(String, Long)]("late")
+
       //0001,2019-11-12 11:25:00
       val socketDStream = env.socketTextStream("39.105.49.35",9999)
 
-      socketDStream.map{line=>
+      val resultDStream = socketDStream.map{line=>
         val data = line.split(",")
         val ts = dateFormat.parse(data(1)).getTime
         (data(0),ts)
@@ -44,10 +47,14 @@ object EventTimeWithWindow {
         .assignTimestampsAndWatermarks(new TimeStampExtractor)
         .keyBy(_._1)
         .window(TumblingEventTimeWindows.of(Time.seconds(3)))
-        //.allowedLateness(Time.seconds(5)) // 允许延迟5s之后才销毁计算过的窗口
+        //.allowedLateness(Time.seconds(5)) // 允许延迟5s之后才销毁计算过的窗口，这里所说的延迟5s也是按水位来算的，不是按事件时间。
+          .sideOutputLateData(lateTag)      //如果窗口已经关闭了，这时还有该窗口的迟到数据，那么放入到侧输出流里，打个标签。
         .process(new MyProcessWindowFunction3)
-        .print()
 
+      //拿到侧输出流里的数据，谁调用了sideOutputLateData方法侧输出流在哪个DataStream里面
+      resultDStream.getSideOutput(lateTag).print("late")
+
+      resultDStream.print()
       env.execute("event_time_wit_window")
   }
 
@@ -61,17 +68,19 @@ class TimeStampExtractor extends AssignerWithPeriodicWatermarks[(String, Long)] 
   val format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
 
   // 水印 是 当前时间减去10s     先执行extractTimestamp方法再执行getCurrentWatermark方法.
-  //其实 getCurrentWatermark方法是在不间断的执行的。
+  // 周期性调用，每200毫秒调用一次生成一个watermark。
   override def getCurrentWatermark: Watermark = {
     //不能在本方法里进行打印操作，因为 getCurrentWatermark方法会一直执行，影响打印效果。
     a = new Watermark(currentMaxTimestamp - maxOutOfOrderness)
     a
   }
 
+  //每来一条数据都会调用这个方法
   override def extractTimestamp(element: (String, Long), previousElementTimestamp: Long): Long = {
     println("===================extractTimestamp start=========================")
     //        println("extractTimestamp")
     val timestamp = element._2
+    //每来一条数据都要更新一下当前最大的时间戳.
     currentMaxTimestamp = Math.max(timestamp, currentMaxTimestamp)
     println("userid：" + element._1)
     println("事件时间戳：" + element._2)
