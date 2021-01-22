@@ -5,7 +5,7 @@ import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.functions.timestamps.BoundedOutOfOrdernessTimestampExtractor
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.windowing.time.Time
-
+import org.apache.flink.streaming.api.scala._
 
 case class Trace(user_id: String, ts: Long, event_type: Int)
 
