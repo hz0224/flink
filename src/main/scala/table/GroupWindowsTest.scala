@@ -23,6 +23,7 @@ object GroupWindowsTest {
       })
       val table = tableEnv.fromDataStream(tupleDStream,'id, 'name, 'age, 'class_name,'ts, 'et.rowtime)
 
+
       //注册表
       tableEnv.createTemporaryView("stu",table)
       val resultTable = tableEnv.sqlQuery(
